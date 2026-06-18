@@ -1,0 +1,105 @@
+{
+  "abnormal_count": 4,
+  "clean_text": "accurate caring instant\n\npatient name test patient\n\nage 30 years sex male\n\nsample collected at sample lab city\n\ncomplete blood count (cbc)\n\ninvestigation result reference value unit\nhemoglobin 9.50 13.00 - 17.00 g/dl\ntotal rbc count 4.80 4.50 - 5.50 mill/cumm\npacked cell volume (pcv) 40 40-50 %\ntotal wbc count 12500 4000 - 11000 cumm\nplatelet count 145000 150000 - 410000 cumm\nvitamin d 12.0 30.0 - 100.0 ng/ml\nvitamin b12 650 200 - 900 pg/ml\ninstruments fully automated cell counter\n\ninterpretation further confirm for anemia / vitamin d deficiency\n\nmedical lab technician dr. sample pathologist (md)",
+  "report_text": "Accurate | Caring | Instant\n\nPatient Name: Test Patient\n\nAge: 30 Years Sex: Male\n\nSample Collected At: Sample Lab, City\n\nComplete Blood Count (CBC)\n\nInvestigation Result Reference Value Unit\nHemoglobin 9.50 13.00 - 17.00 g/dL\nTotal RBC count 4.80 4.50 - 5.50 mill/cumm\nPacked Cell Volume (PCV) 40 40-50 %\nTotal WBC count 12500 4000 - 11000 cumm\nPlatelet Count 145000 150000 - 410000 cumm\nVitamin D 12.0 30.0 - 100.0 ng/mL\nVitamin B12 650 200 - 900 pg/mL\nInstruments: Fully automated cell counter\n\nInterpretation: Further confirm for Anemia / Vitamin D deficiency\n\nMedical Lab Technician Dr. Sample Pathologist (MD)\n",
+  "result": {
+    "en": {
+      "abnormal_values": [
+        "Hemoglobin is LOW (9.5 g/dL, normal range 13.0-17.0)",
+        "WBC Count is HIGH (12500.0 cumm, normal range 4000.0-11000.0)",
+        "Platelet Count is LOW (145000.0 cumm, normal range 150000.0-410000.0)",
+        "Vitamin D is LOW (12.0 ng/mL, normal range 30.0-100.0)"
+      ],
+      "overall_message": "Some values in your report are outside the normal range.",
+      "recommendation": "A Cardiologist (heart specialist) should be consulted.",
+      "specialty": "Cardiology"
+    },
+    "hi": {
+      "abnormal_values": [
+        "हीमोग्लोबिन कम है (9.5 g/dL)",
+        "डब्ल्यूबीसी काउंट ज़्यादा है (12500.0 cumm)",
+        "प्लेटलेट काउंट कम है (145000.0 cumm)",
+        "विटामिन डी कम है (12.0 ng/mL)"
+      ],
+      "overall_message": "आपकी रिपोर्ट में कुछ values सामान्य सीमा से बाहर हैं।",
+      "recommendation": "आपको एक कार्डियोलॉजिस्ट (हृदय रोग विशेषज्ञ) से सलाह लेनी चाहिए।",
+      "specialty": "कार्डियोलॉजी"
+    },
+    "mr": {
+      "abnormal_values": [
+        "हिमोग्लोबिन कमी आहे (9.5 g/dL)",
+        "डब्ल्यूबीसी काउंट जास्त आहे (12500.0 cumm)",
+        "प्लेटलेट काउंट कमी आहे (145000.0 cumm)",
+        "व्हिटॅमिन डी कमी आहे (12.0 ng/mL)"
+      ],
+      "overall_message": "तुमच्या रिपोर्टमध्ये काही values सामान्य श्रेणीच्या बाहेर आहेत.",
+      "recommendation": "तुम्ही कार्डिओलॉजिस्ट (हृदयरोग तज्ज्ञ) यांचा सल्ला घ्यावा.",
+      "specialty": "कार्डिओलॉजी"
+    }
+  },
+  "test_results": [
+    {
+      "reference_high": 17.0,
+      "reference_low": 13.0,
+      "result": 9.5,
+      "status": "LOW",
+      "test_key": "hemoglobin",
+      "test_name": "Hemoglobin",
+      "unit": "g/dL"
+    },
+    {
+      "reference_high": 5.5,
+      "reference_low": 4.5,
+      "result": 4.8,
+      "status": "NORMAL",
+      "test_key": "total rbc count",
+      "test_name": "Total RBC count",
+      "unit": "mill/cumm"
+    },
+    {
+      "reference_high": 50.0,
+      "reference_low": 40.0,
+      "result": 40.0,
+      "status": "NORMAL",
+      "test_key": "packed cell volume (pcv)",
+      "test_name": "Packed Cell Volume (PCV)",
+      "unit": "%"
+    },
+    {
+      "reference_high": 11000.0,
+      "reference_low": 4000.0,
+      "result": 12500.0,
+      "status": "HIGH",
+      "test_key": "total wbc count",
+      "test_name": "Total WBC count",
+      "unit": "cumm"
+    },
+    {
+      "reference_high": 410000.0,
+      "reference_low": 150000.0,
+      "result": 145000.0,
+      "status": "LOW",
+      "test_key": "platelet count",
+      "test_name": "Platelet Count",
+      "unit": "cumm"
+    },
+    {
+      "reference_high": 100.0,
+      "reference_low": 30.0,
+      "result": 12.0,
+      "status": "LOW",
+      "test_key": "vitamin d",
+      "test_name": "Vitamin D",
+      "unit": "ng/mL"
+    },
+    {
+      "reference_high": 900.0,
+      "reference_low": 200.0,
+      "result": 650.0,
+      "status": "NORMAL",
+      "test_key": "vitamin b12",
+      "test_name": "Vitamin B12",
+      "unit": "pg/mL"
+    }
+  ]
+}
