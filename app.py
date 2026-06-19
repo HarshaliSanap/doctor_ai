@@ -14,7 +14,10 @@ app.json.ensure_ascii = False             # works on Flask >= 2.3 (new JSON prov
 model = joblib.load("doctor_model.pkl")
 
 # Tesseract path (Windows)
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+# pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+import os
+if os.name == 'nt':  # Windows वर च run होईल
+    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 # -----------------------------------------------------
 # Specialist info — trilingual (English / Hindi / Marathi)
