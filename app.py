@@ -118,7 +118,7 @@ OVERALL_MESSAGE = {
 def preprocess_image_for_ocr(pil_image):
     img_array = np.array(pil_image.convert("RGB"))
     img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
-    scale = 4
+    scale = 2
     upscaled = cv2.resize(img_bgr, None, fx=scale, fy=scale, interpolation=cv2.INTER_LANCZOS4)
     gray = cv2.cvtColor(upscaled, cv2.COLOR_BGR2GRAY)
     denoised = cv2.fastNlMeansDenoising(gray, h=10)
