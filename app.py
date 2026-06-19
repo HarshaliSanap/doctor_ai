@@ -1,23 +1,27 @@
 ﻿from flask import Flask, request, jsonify
+from flask_cors import CORS
 import joblib
 import pytesseract
 import cv2
 import numpy as np
 from PIL import Image
 import re
+import os
 
 app = Flask(__name__)
-app.config['JSON_AS_ASCII'] = False       # works on Flask < 2.3
-app.json.ensure_ascii = False             # works on Flask >= 2.3 (new JSON provider API)
+CORS(app)  # ✅ CORS add केला
+
+app.config['JSON_AS_ASCII'] = False
+app.json.ensure_ascii = False
 
 # Load AI model
 model = joblib.load("doctor_model.pkl")
 
-# Tesseract path (Windows)
-# pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-import os
-if os.name == 'nt':  # Windows वर च run होईल
+# Tesseract path
+if os.name == 'nt':  # Windows
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+else:  # Linux (Render)
+    pytesseract.pytesseract.tesseract_cmd = r"/usr/bin/tesseract"
 
 # -----------------------------------------------------
 # Specialist info — trilingual (English / Hindi / Marathi)
@@ -56,7 +60,6 @@ DEFAULT_RECOMMENDATION = {
     "mr": "कृपया संबंधित तज्ज्ञांचा सल्ला घ्या."
 }
 
-# Specialty name translations (for display)
 SPECIALTY_TRANSLATIONS = {
     "Cardiology": {"en": "Cardiology", "hi": "कार्डियोलॉजी", "mr": "कार्डिओलॉजी"},
     "Dermatology": {"en": "Dermatology", "hi": "डर्मेटोलॉजी", "mr": "डर्मेटोलॉजी"},
@@ -74,14 +77,10 @@ specialty_keywords = {
     "General Medicine": ["general checkup", "fever", "physical examination"]
 }
 
-# -----------------------------------------------------
-# Value extraction patterns: TestName  Result  Low-High  Unit
-# -----------------------------------------------------
 VALUE_PATTERN = re.compile(
     r'([A-Za-z][A-Za-z0-9\s\(\)]*?)\s+([\d]+\.?\d*)\s+([\d]+\.?\d*)\s*-\s*([\d]+\.?\d*)\s*([a-zA-Z/%]+)'
 )
 
-# Display-name translations for common test names (Hindi / Marathi)
 TEST_NAME_TRANSLATIONS = {
     "hemoglobin": {"en": "Hemoglobin", "hi": "हीमोग्लोबिन", "mr": "हिमोग्लोबिन"},
     "total rbc count": {"en": "RBC Count", "hi": "आरबीसी काउंट", "mr": "आरबीसी काउंट"},
@@ -98,7 +97,6 @@ STATUS_TEXT = {
     "NORMAL": {"en": "is Normal", "hi": "सामान्य है",  "mr": "सामान्य आहे"},
 }
 
-# Overall result headline, based on whether any abnormal values were found
 OVERALL_MESSAGE = {
     "abnormal": {
         "en": "Some values in your report are outside the normal range.",
@@ -119,16 +117,13 @@ OVERALL_MESSAGE = {
 
 
 def preprocess_image_for_ocr(pil_image):
-    """Upscale, denoise, and binarize to improve OCR accuracy on small/noisy scans."""
     img_array = np.array(pil_image.convert("RGB"))
     img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
-
     scale = 4
     upscaled = cv2.resize(img_bgr, None, fx=scale, fy=scale, interpolation=cv2.INTER_LANCZOS4)
     gray = cv2.cvtColor(upscaled, cv2.COLOR_BGR2GRAY)
     denoised = cv2.fastNlMeansDenoising(gray, h=10)
     _, thresh = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
     return Image.fromarray(thresh)
 
 
@@ -146,35 +141,25 @@ def keyword_based_specialty(clean_text):
 
 
 def extract_test_values(raw_text):
-    """
-    Parses lines like 'Hemoglobin 9.50 13.00 - 17.00 g/dL' into structured
-    test results, and classifies each as LOW / HIGH / NORMAL.
-    """
     results = []
     for line in raw_text.split("\n"):
         match = VALUE_PATTERN.search(line)
         if not match:
             continue
-
         name, result, low, high, unit = match.groups()
         name_clean = re.sub(r"\s+", " ", name).strip()
-
         try:
             result_f, low_f, high_f = float(result), float(low), float(high)
         except ValueError:
             continue
-
-        # Sanity check: skip obviously wrong parses (e.g. reference range inverted or zero-width)
         if low_f >= high_f:
             continue
-
         if result_f < low_f:
             status = "LOW"
         elif result_f > high_f:
             status = "HIGH"
         else:
             status = "NORMAL"
-
         results.append({
             "test_name": name_clean,
             "test_key": name_clean.lower(),
@@ -184,141 +169,63 @@ def extract_test_values(raw_text):
             "unit": unit,
             "status": status
         })
-
     return results
 
 
 def build_value_summary(test_results):
-    """
-    Builds English / Hindi / Marathi sentences for abnormal (LOW/HIGH) values.
-    Falls back to the raw extracted test name if no translation is available.
-    """
     summary = {"en": [], "hi": [], "mr": []}
-
     for item in test_results:
         if item["status"] == "NORMAL":
-            continue  # only report abnormal values in the summary
-
+            continue
         key = item["test_key"]
         translations = TEST_NAME_TRANSLATIONS.get(key, {
             "en": item["test_name"], "hi": item["test_name"], "mr": item["test_name"]
         })
         status_text = STATUS_TEXT[item["status"]]
-
         summary["en"].append(f"{translations['en']} {status_text['en']} ({item['result']} {item['unit']}, normal range {item['reference_low']}-{item['reference_high']})")
         summary["hi"].append(f"{translations['hi']} {status_text['hi']} ({item['result']} {item['unit']})")
         summary["mr"].append(f"{translations['mr']} {status_text['mr']} ({item['result']} {item['unit']})")
-
     return summary
 
+
 def build_doctor_explanation(test_results):
-
-    explanation = {
-        "en": [],
-        "hi": [],
-        "mr": []
-    }
-
+    explanation = {"en": [], "hi": [], "mr": []}
     for item in test_results:
-
         key = item["test_key"]
         status = item["status"]
-
         if key == "hemoglobin" and status == "LOW":
-
-            explanation["en"].append(
-                "Your hemoglobin level is low, which may indicate anemia. You may experience weakness, fatigue and dizziness."
-            )
-
-            explanation["hi"].append(
-                "आपका हीमोग्लोबिन कम है, जो एनीमिया का संकेत हो सकता है। इससे कमजोरी, थकान और चक्कर आ सकते हैं।"
-            )
-
-            explanation["mr"].append(
-                "तुमचे हिमोग्लोबिन कमी आहे. हे अशक्तपणाचे लक्षण असू शकते. यामुळे थकवा, कमजोरी आणि चक्कर येऊ शकते."
-            )
-
+            explanation["en"].append("Your hemoglobin level is low, which may indicate anemia. You may experience weakness, fatigue and dizziness.")
+            explanation["hi"].append("आपका हीमोग्लोबिन कम है, जो एनीमिया का संकेत हो सकता है। इससे कमजोरी, थकान और चक्कर आ सकते हैं।")
+            explanation["mr"].append("तुमचे हिमोग्लोबिन कमी आहे. हे अशक्तपणाचे लक्षण असू शकते. यामुळे थकवा, कमजोरी आणि चक्कर येऊ शकते.")
         elif key == "total wbc count" and status == "HIGH":
-
-            explanation["en"].append(
-                "Your WBC count is elevated, which may indicate an infection or inflammation in the body."
-            )
-
-            explanation["hi"].append(
-                "आपका WBC काउंट बढ़ा हुआ है, जो संक्रमण या सूजन का संकेत हो सकता है।"
-            )
-
-            explanation["mr"].append(
-                "तुमचा WBC काउंट वाढलेला आहे. हे शरीरात संसर्ग किंवा दाह दर्शवू शकते."
-            )
-
+            explanation["en"].append("Your WBC count is elevated, which may indicate an infection or inflammation in the body.")
+            explanation["hi"].append("आपका WBC काउंट बढ़ा हुआ है, जो संक्रमण या सूजन का संकेत हो सकता है।")
+            explanation["mr"].append("तुमचा WBC काउंट वाढलेला आहे. हे शरीरात संसर्ग किंवा दाह दर्शवू शकते.")
         elif key == "platelet count" and status == "LOW":
-
-            explanation["en"].append(
-                "Your platelet count is below normal. This may increase the risk of bleeding."
-            )
-
-            explanation["hi"].append(
-                "आपका प्लेटलेट काउंट कम है। इससे रक्तस्राव का खतरा बढ़ सकता है।"
-            )
-
-            explanation["mr"].append(
-                "तुमचा प्लेटलेट काउंट कमी आहे. यामुळे रक्तस्रावाचा धोका वाढू शकतो."
-            )
-
+            explanation["en"].append("Your platelet count is below normal. This may increase the risk of bleeding.")
+            explanation["hi"].append("आपका प्लेटलेट काउंट कम है। इससे रक्तस्राव का खतरा बढ़ सकता है।")
+            explanation["mr"].append("तुमचा प्लेटलेट काउंट कमी आहे. यामुळे रक्तस्रावाचा धोका वाढू शकतो.")
         elif key == "vitamin d" and status == "LOW":
-
-            explanation["en"].append(
-                "Your Vitamin D level is low. This may cause bone weakness, muscle pain and fatigue."
-            )
-
-            explanation["hi"].append(
-                "आपका विटामिन D कम है। इससे हड्डियां कमजोर हो सकती हैं।"
-            )
-
-            explanation["mr"].append(
-                "तुमचे व्हिटॅमिन D कमी आहे. यामुळे हाडे कमकुवत होऊ शकतात."
-            )
-
+            explanation["en"].append("Your Vitamin D level is low. This may cause bone weakness, muscle pain and fatigue.")
+            explanation["hi"].append("आपका विटामिन D कम है। इससे हड्डियां कमजोर हो सकती हैं।")
+            explanation["mr"].append("तुमचे व्हिटॅमिन D कमी आहे. यामुळे हाडे कमकुवत होऊ शकतात.")
     return explanation
+
+
 def build_full_trilingual_response(specialty, test_results):
-    """
-    Builds the complete trilingual response block.
-    """
-
-    specialty_name = SPECIALTY_TRANSLATIONS.get(
-        specialty,
-        {
-            "en": specialty,
-            "hi": specialty,
-            "mr": specialty
-        }
-    )
-
-    recommendation = specialist_info.get(
-        specialty,
-        DEFAULT_RECOMMENDATION
-    )
-
+    specialty_name = SPECIALTY_TRANSLATIONS.get(specialty, {"en": specialty, "hi": specialty, "mr": specialty})
+    recommendation = specialist_info.get(specialty, DEFAULT_RECOMMENDATION)
     value_summary = build_value_summary(test_results)
     doctor_explanation = build_doctor_explanation(test_results)
-
-    abnormal_count = sum(
-        1 for t in test_results
-        if t["status"] != "NORMAL"
-    )
-
+    abnormal_count = sum(1 for t in test_results if t["status"] != "NORMAL")
     if not test_results:
         overall_key = "no_data"
     elif abnormal_count > 0:
         overall_key = "abnormal"
     else:
         overall_key = "normal"
-
     overall = OVERALL_MESSAGE[overall_key]
-
     result = {}
-
     for lang in ["en", "hi", "mr"]:
         result[lang] = {
             "specialty": specialty_name[lang],
@@ -327,35 +234,26 @@ def build_full_trilingual_response(specialty, test_results):
             "abnormal_values": value_summary[lang],
             "doctor_explanation": doctor_explanation[lang]
         }
-
     return result, abnormal_count
 
-# -----------------------------
-# Home route
-# -----------------------------
+
 @app.route('/')
 def home():
     return "Doctor AI API Running Successfully"
 
-# -----------------------------
-# Symptoms-based prediction
-# -----------------------------
+
 @app.route('/predict', methods=['POST'])
 def predict():
     data = request.json
     symptoms = data.get("symptoms", "")
-
     if not symptoms:
         return jsonify({"error": "No symptoms provided"}), 400
-
     try:
         specialty = model.predict([symptoms])[0]
     except Exception as e:
         return jsonify({"error": "Prediction failed", "details": str(e)}), 500
-
     specialty_name = SPECIALTY_TRANSLATIONS.get(specialty, {"en": specialty, "hi": specialty, "mr": specialty})
     recommendation = specialist_info.get(specialty, DEFAULT_RECOMMENDATION)
-
     return jsonify({
         "input": symptoms,
         "result": {
@@ -365,44 +263,30 @@ def predict():
         }
     })
 
-# -----------------------------
-# Report Image-based prediction
-# -----------------------------
+
 @app.route('/predict-report', methods=['POST'])
 def predict_report():
     if 'image' not in request.files:
         return jsonify({"error": "No image uploaded"}), 400
-
     file = request.files['image']
-
     try:
         image = Image.open(file.stream)
         processed_image = preprocess_image_for_ocr(image)
-
         text = pytesseract.image_to_string(processed_image, config=r'--oem 3 --psm 6')
         clean_text = clean_ocr_text(text)
-
-        # Specialty detection (ML + keyword cross-check)
         try:
             ml_specialty = model.predict([clean_text])[0]
         except Exception:
             ml_specialty = None
-
         keyword_specialty, keyword_score = keyword_based_specialty(clean_text)
-
         if keyword_score >= 2:
             final_specialty = keyword_specialty
         elif ml_specialty:
             final_specialty = ml_specialty
         else:
             final_specialty = keyword_specialty
-
-        # Test value extraction + low/high detection
         test_results = extract_test_values(text)
-
-        # Full trilingual response (specialty + recommendation + overall message + abnormal values)
         trilingual_result, abnormal_count = build_full_trilingual_response(final_specialty, test_results)
-
         return jsonify({
             "report_text": text,
             "clean_text": clean_text,
@@ -410,7 +294,6 @@ def predict_report():
             "abnormal_count": abnormal_count,
             "result": trilingual_result
         })
-
     except Exception as e:
         return jsonify({"error": "Report processing failed", "details": str(e)}), 500
 
