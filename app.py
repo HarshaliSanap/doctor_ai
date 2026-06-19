@@ -9,7 +9,9 @@ import re
 import os
 
 app = Flask(__name__)
-CORS(app)  # ✅ CORS add केला
+
+# ✅ CORS fix — सर्व origins allow करा
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=False)
 
 app.config['JSON_AS_ASCII'] = False
 app.json.ensure_ascii = False
@@ -23,9 +25,6 @@ if os.name == 'nt':  # Windows
 else:  # Linux (Render)
     pytesseract.pytesseract.tesseract_cmd = r"/usr/bin/tesseract"
 
-# -----------------------------------------------------
-# Specialist info — trilingual (English / Hindi / Marathi)
-# -----------------------------------------------------
 specialist_info = {
     "Cardiology": {
         "en": "A Cardiologist (heart specialist) should be consulted.",
@@ -237,13 +236,24 @@ def build_full_trilingual_response(specialty, test_results):
     return result, abnormal_count
 
 
+# ✅ CORS preflight requests handle करा
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
+
+
 @app.route('/')
 def home():
     return "Doctor AI API Running Successfully"
 
 
-@app.route('/predict', methods=['POST'])
+@app.route('/predict', methods=['POST', 'OPTIONS'])
 def predict():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
     data = request.json
     symptoms = data.get("symptoms", "")
     if not symptoms:
@@ -264,8 +274,10 @@ def predict():
     })
 
 
-@app.route('/predict-report', methods=['POST'])
+@app.route('/predict-report', methods=['POST', 'OPTIONS'])
 def predict_report():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
     if 'image' not in request.files:
         return jsonify({"error": "No image uploaded"}), 400
     file = request.files['image']
