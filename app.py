@@ -116,11 +116,7 @@ OVERALL_MESSAGE = {
 
 
 def preprocess_image_for_ocr(pil_image):
-    img = pil_image.convert("L")
-    width, height = img.size
-    new_size = (int(width * 1.5), int(height * 1.5))
-    img = img.resize(new_size, Image.LANCZOS)
-    return img
+    return pil_image.convert("RGB")
 
 
 def clean_ocr_text(raw_text):
