@@ -4,8 +4,10 @@ from flask_cors import CORS
 import joblib
 import pytesseract
 from PIL import Image
+from pdf2image import convert_from_bytes
 import re
 import os
+import io
 
 app = Flask(__name__)
 CORS(app)
@@ -103,15 +105,24 @@ OVERALL_MESSAGE = {
         "mr": "सर्व काढलेल्या values सामान्य श्रेणीत आहेत."
     },
     "no_data": {
-        "en": "Could not reliably extract test values from this image. Please upload a clearer/higher-resolution image.",
-        "hi": "इस इमेज से टेस्ट values सही से नहीं निकाली जा सकीं। कृपया एक स्पष्ट / बेहतर गुणवत्ता वाली इमेज अपलोड करें।",
-        "mr": "या इमेजमधून टेस्ट values अचूकपणे काढता आल्या नाहीत. कृपया अधिक स्पष्ट / उच्च गुणवत्तेची इमेज अपलोड करा."
+        "en": "Could not reliably extract test values from this file. Please upload a clearer image or PDF.",
+        "hi": "इस फ़ाइल से टेस्ट values सही से नहीं निकाली जा सकीं। कृपया एक स्पष्ट इमेज या PDF अपलोड करें।",
+        "mr": "या फाईलमधून टेस्ट values अचूकपणे काढता आल्या नाहीत. कृपया स्पष्ट इमेज किंवा PDF अपलोड करा."
     }
 }
 
 
-def preprocess_image_for_ocr(pil_image):
-    return pil_image.convert("RGB")
+def extract_text_from_image(pil_image):
+    image = pil_image.convert("RGB")
+    return pytesseract.image_to_string(image, config=r'--oem 3 --psm 6')
+
+
+def extract_text_from_pdf(pdf_bytes):
+    # PDF च्या पहिल्या page वरून text काढा
+    pages = convert_from_bytes(pdf_bytes, first_page=1, last_page=1, dpi=150)
+    if not pages:
+        return ""
+    return pytesseract.image_to_string(pages[0], config=r'--oem 3 --psm 6')
 
 
 def clean_ocr_text(raw_text):
@@ -265,18 +276,29 @@ def predict():
 def predict_report():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
-    if 'image' not in request.files:
-        return jsonify({"error": "No image uploaded"}), 400
-    file = request.files['image']
+    if 'file' not in request.files and 'image' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    file = request.files.get('file') or request.files.get('image')
+    filename = file.filename.lower()
+
     try:
-        image = Image.open(file.stream)
-        processed_image = preprocess_image_for_ocr(image)
-        text = pytesseract.image_to_string(processed_image, config=r'--oem 3 --psm 6')
+        file_bytes = file.read()
+
+        # PDF or Image handle करा
+        if filename.endswith('.pdf'):
+            text = extract_text_from_pdf(file_bytes)
+        else:
+            image = Image.open(io.BytesIO(file_bytes))
+            text = extract_text_from_image(image)
+
         clean_text = clean_ocr_text(text)
+
         try:
             ml_specialty = model.predict([clean_text])[0]
         except Exception:
             ml_specialty = None
+
         keyword_specialty, keyword_score = keyword_based_specialty(clean_text)
         if keyword_score >= 2:
             final_specialty = keyword_specialty
@@ -284,8 +306,10 @@ def predict_report():
             final_specialty = ml_specialty
         else:
             final_specialty = keyword_specialty
+
         test_results = extract_test_values(text)
         trilingual_result, abnormal_count = build_full_trilingual_response(final_specialty, test_results)
+
         return jsonify({
             "report_text": text,
             "clean_text": clean_text,
@@ -293,6 +317,7 @@ def predict_report():
             "abnormal_count": abnormal_count,
             "result": trilingual_result
         })
+
     except Exception as e:
         return jsonify({"error": "Report processing failed", "details": str(e)}), 500
 
