@@ -10,7 +10,7 @@ import os
 
 app = Flask(__name__)
 
-# ? CORS fix — ???? origins allow ???
+# ? CORS fix â€” ???? origins allow ???
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=False)
 
 app.config['JSON_AS_ASCII'] = False
@@ -116,14 +116,11 @@ OVERALL_MESSAGE = {
 
 
 def preprocess_image_for_ocr(pil_image):
-    img_array = np.array(pil_image.convert("RGB"))
-    img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
-    scale = 2
-    upscaled = cv2.resize(img_bgr, None, fx=scale, fy=scale, interpolation=cv2.INTER_LANCZOS4)
-    gray = cv2.cvtColor(upscaled, cv2.COLOR_BGR2GRAY)
-    denoised = cv2.fastNlMeansDenoising(gray, h=10)
-    _, thresh = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    return Image.fromarray(thresh)
+    img = pil_image.convert("L")
+    width, height = img.size
+    new_size = (int(width * 1.5), int(height * 1.5))
+    img = img.resize(new_size, Image.LANCZOS)
+    return img
 
 
 def clean_ocr_text(raw_text):
