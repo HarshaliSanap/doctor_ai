@@ -4,7 +4,7 @@ from flask_cors import CORS
 import joblib
 import pytesseract
 from PIL import Image
-from pdf2image import convert_from_bytes
+import pdfplumber
 import re
 import os
 import io
@@ -105,24 +105,31 @@ OVERALL_MESSAGE = {
         "mr": "सर्व काढलेल्या values सामान्य श्रेणीत आहेत."
     },
     "no_data": {
-        "en": "Could not reliably extract test values from this file. Please upload a clearer image or PDF.",
-        "hi": "इस फ़ाइल से टेस्ट values सही से नहीं निकाली जा सकीं। कृपया एक स्पष्ट इमेज या PDF अपलोड करें।",
-        "mr": "या फाईलमधून टेस्ट values अचूकपणे काढता आल्या नाहीत. कृपया स्पष्ट इमेज किंवा PDF अपलोड करा."
+        "en": "Could not extract test values. Please upload a clearer image or text-based PDF.",
+        "hi": "टेस्ट values नहीं निकाली जा सकीं। कृपया स्पष्ट इमेज या टेक्स्ट PDF अपलोड करें।",
+        "mr": "टेस्ट values काढता आल्या नाहीत. कृपया स्पष्ट इमेज किंवा टेक्स्ट PDF अपलोड करा."
     }
 }
 
 
+# ✅ PDF मधून text काढा — tesseract नाही, pdfplumber वापरतो
+def extract_text_from_pdf(pdf_bytes):
+    text = ""
+    try:
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+    except Exception as e:
+        print(f"PDF extraction error: {e}")
+    return text
+
+
+# ✅ Image मधून text काढा — tesseract वापरतो
 def extract_text_from_image(pil_image):
     image = pil_image.convert("RGB")
     return pytesseract.image_to_string(image, config=r'--oem 3 --psm 6')
-
-
-def extract_text_from_pdf(pdf_bytes):
-    # PDF च्या पहिल्या page वरून text काढा
-    pages = convert_from_bytes(pdf_bytes, first_page=1, last_page=1, dpi=150)
-    if not pages:
-        return ""
-    return pytesseract.image_to_string(pages[0], config=r'--oem 3 --psm 6')
 
 
 def clean_ocr_text(raw_text):
@@ -276,16 +283,18 @@ def predict():
 def predict_report():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
-    if 'file' not in request.files and 'image' not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
 
     file = request.files.get('file') or request.files.get('image')
+    if not file:
+        return jsonify({"error": "No file uploaded"}), 400
+
     filename = file.filename.lower()
 
     try:
         file_bytes = file.read()
 
-        # PDF or Image handle करा
+        # ✅ PDF → pdfplumber (tesseract नाही!)
+        # ✅ Image → pytesseract
         if filename.endswith('.pdf'):
             text = extract_text_from_pdf(file_bytes)
         else:
@@ -319,6 +328,8 @@ def predict_report():
         })
 
     except Exception as e:
+        import traceback
+        print(traceback.format_exc())
         return jsonify({"error": "Report processing failed", "details": str(e)}), 500
 
 
