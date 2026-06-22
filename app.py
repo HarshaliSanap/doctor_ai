@@ -8,6 +8,7 @@ import pdfplumber
 import re
 import os
 import io
+import subprocess
 
 app = Flask(__name__)
 CORS(app)
@@ -17,60 +18,94 @@ app.json.ensure_ascii = False
 
 model = joblib.load("doctor_model.pkl")
 
+# ✅ Tesseract path auto-detect
 if os.name == 'nt':
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 else:
-    pytesseract.pytesseract.tesseract_cmd = r"/usr/bin/tesseract"
+    try:
+        result = subprocess.run(['which', 'tesseract'], capture_output=True, text=True)
+        tesseract_path = result.stdout.strip()
+        if tesseract_path:
+            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+    except:
+        pytesseract.pytesseract.tesseract_cmd = r"/usr/bin/tesseract"
 
+# ✅ सोपी भाषेत specialist info
 specialist_info = {
     "Cardiology": {
-        "en": "A Cardiologist (heart specialist) should be consulted.",
-        "hi": "आपको एक कार्डियोलॉजिस्ट (हृदय रोग विशेषज्ञ) से सलाह लेनी चाहिए।",
-        "mr": "तुम्ही कार्डिओलॉजिस्ट (हृदयरोग तज्ज्ञ) यांचा सल्ला घ्यावा."
+        "en": "Please visit a Heart Doctor (Cardiologist) near you.",
+        "hi": "कृपया अपने नजदीकी हृदय रोग विशेषज्ञ (दिल के डॉक्टर) के पास जाएं।",
+        "mr": "कृपया जवळच्या हृदयरोग तज्ज्ञ (हृदयाच्या डॉक्टर) यांच्याकडे जा."
     },
     "Dermatology": {
-        "en": "A Dermatologist (skin specialist) should be consulted.",
-        "hi": "आपको एक डर्मेटोलॉजिस्ट (त्वचा रोग विशेषज्ञ) से सलाह लेनी चाहिए।",
-        "mr": "तुम्ही डर्मेटोलॉजिस्ट (त्वचारोग तज्ज्ञ) यांचा सल्ला घ्यावा."
+        "en": "Please visit a Skin Doctor (Dermatologist) near you.",
+        "hi": "कृपया अपने नजदीकी त्वचा रोग विशेषज्ञ (चमड़ी के डॉक्टर) के पास जाएं।",
+        "mr": "कृपया जवळच्या त्वचारोग तज्ज्ञ (त्वचेच्या डॉक्टर) यांच्याकडे जा."
     },
     "Neurology": {
-        "en": "A Neurologist (brain & nervous system specialist) should be consulted.",
-        "hi": "आपको एक न्यूरोलॉजिस्ट (मस्तिष्क व तंत्रिका तंत्र विशेषज्ञ) से सलाह लेनी चाहिए।",
-        "mr": "तुम्ही न्यूरोलॉजिस्ट (मेंदू व मज्जासंस्था तज्ज्ञ) यांचा सल्ला घ्यावा."
+        "en": "Please visit a Brain Doctor (Neurologist) near you.",
+        "hi": "कृपया अपने नजदीकी मस्तिष्क रोग विशेषज्ञ (दिमाग के डॉक्टर) के पास जाएं।",
+        "mr": "कृपया जवळच्या मेंदूरोग तज्ज्ञ (मेंदूच्या डॉक्टर) यांच्याकडे जा."
     },
     "Orthopedics": {
-        "en": "An Orthopedic specialist (bone & joint specialist) should be consulted.",
-        "hi": "आपको एक ऑर्थोपेडिक विशेषज्ञ (हड्डी व जोड़ों के विशेषज्ञ) से सलाह लेनी चाहिए।",
-        "mr": "तुम्ही ऑर्थोपेडिक तज्ज्ञ (हाडे व सांधे तज्ज्ञ) यांचा सल्ला घ्यावा."
+        "en": "Please visit a Bone Doctor (Orthopedic) near you.",
+        "hi": "कृपया अपने नजदीकी हड्डी रोग विशेषज्ञ (हड्डी के डॉक्टर) के पास जाएं।",
+        "mr": "कृपया जवळच्या हाडांच्या तज्ज्ञ (हाडांच्या डॉक्टर) यांच्याकडे जा."
     },
     "General Medicine": {
-        "en": "A General Physician should be consulted.",
-        "hi": "आपको एक जनरल फिजिशियन से सलाह लेनी चाहिए।",
-        "mr": "तुम्ही जनरल फिजिशियन यांचा सल्ला घ्यावा."
+        "en": "Please visit a General Doctor near you.",
+        "hi": "कृपया अपने नजदीकी साधारण डॉक्टर के पास जाएं।",
+        "mr": "कृपया जवळच्या साध्या डॉक्टरांकडे जा."
     }
 }
 
 DEFAULT_RECOMMENDATION = {
-    "en": "Please consult a relevant specialist.",
-    "hi": "कृपया संबंधित विशेषज्ञ से सलाह लें।",
-    "mr": "कृपया संबंधित तज्ज्ञांचा सल्ला घ्या."
+    "en": "Please visit a doctor near you.",
+    "hi": "कृपया अपने नजदीकी डॉक्टर के पास जाएं।",
+    "mr": "कृपया जवळच्या डॉक्टरांकडे जा."
 }
 
+# ✅ सोपी भाषेत specialty names
 SPECIALTY_TRANSLATIONS = {
-    "Cardiology": {"en": "Cardiology", "hi": "कार्डियोलॉजी", "mr": "कार्डिओलॉजी"},
-    "Dermatology": {"en": "Dermatology", "hi": "डर्मेटोलॉजी", "mr": "डर्मेटोलॉजी"},
-    "Neurology": {"en": "Neurology", "hi": "न्यूरोलॉजी", "mr": "न्यूरोलॉजी"},
-    "Orthopedics": {"en": "Orthopedics", "hi": "ऑर्थोपेडिक्स", "mr": "ऑर्थोपेडिक्स"},
-    "General Medicine": {"en": "General Medicine", "hi": "जनरल मेडिसिन", "mr": "जनरल मेडिसिन"}
+    "Cardiology": {
+        "en": "Heart Doctor (Cardiology)",
+        "hi": "हृदय रोग विशेषज्ञ (दिल के डॉक्टर)",
+        "mr": "हृदयरोग तज्ज्ञ (हृदयाचे डॉक्टर)"
+    },
+    "Dermatology": {
+        "en": "Skin Doctor (Dermatology)",
+        "hi": "त्वचा रोग विशेषज्ञ (चमड़ी के डॉक्टर)",
+        "mr": "त्वचारोग तज्ज्ञ (त्वचेचे डॉक्टर)"
+    },
+    "Neurology": {
+        "en": "Brain Doctor (Neurology)",
+        "hi": "मस्तिष्क रोग विशेषज्ञ (दिमाग के डॉक्टर)",
+        "mr": "मेंदूरोग तज्ज्ञ (मेंदूचे डॉक्टर)"
+    },
+    "Orthopedics": {
+        "en": "Bone Doctor (Orthopedics)",
+        "hi": "हड्डी रोग विशेषज्ञ (हड्डी के डॉक्टर)",
+        "mr": "हाडांचे तज्ज्ञ (हाडांचे डॉक्टर)"
+    },
+    "General Medicine": {
+        "en": "General Doctor (General Medicine)",
+        "hi": "साधारण डॉक्टर (जनरल मेडिसिन)",
+        "mr": "साधे डॉक्टर (जनरल मेडिसिन)"
+    }
 }
 
 specialty_keywords = {
     "Cardiology": ["blood count", "cbc", "hemoglobin", "cholesterol", "lipid",
-                   "cardiac", "ecg", "ekg", "troponin", "triglyceride", "wbc", "rbc"],
-    "Dermatology": ["skin", "biopsy", "dermat", "rash", "lesion"],
-    "Neurology": ["brain", "mri brain", "eeg", "neuro", "nerve", "spinal"],
-    "Orthopedics": ["bone", "fracture", "joint", "x-ray", "orthop", "spine"],
-    "General Medicine": ["general checkup", "fever", "physical examination"]
+                   "cardiac", "ecg", "ekg", "troponin", "triglyceride", "wbc", "rbc",
+                   "chest pain", "heart", "blood pressure", "palpitation"],
+    "Dermatology": ["skin", "biopsy", "dermat", "rash", "lesion", "acne",
+                    "eczema", "itching", "redness"],
+    "Neurology": ["brain", "mri brain", "eeg", "neuro", "nerve", "spinal",
+                  "migraine", "headache", "seizure", "memory", "dizziness"],
+    "Orthopedics": ["bone", "fracture", "joint", "x-ray", "orthop", "spine",
+                    "arthritis", "knee", "shoulder", "swelling"],
+    "General Medicine": ["general checkup", "fever", "physical examination",
+                         "cold", "cough", "infection", "viral", "body pain"]
 }
 
 VALUE_PATTERN = re.compile(
@@ -112,7 +147,6 @@ OVERALL_MESSAGE = {
 }
 
 
-# ✅ PDF मधून text काढा — tesseract नाही, pdfplumber वापरतो
 def extract_text_from_pdf(pdf_bytes):
     text = ""
     try:
@@ -126,10 +160,13 @@ def extract_text_from_pdf(pdf_bytes):
     return text
 
 
-# ✅ Image मधून text काढा — tesseract वापरतो
 def extract_text_from_image(pil_image):
-    image = pil_image.convert("RGB")
-    return pytesseract.image_to_string(image, config=r'--oem 3 --psm 6')
+    try:
+        image = pil_image.convert("RGB")
+        return pytesseract.image_to_string(image, config=r'--oem 3 --psm 6')
+    except Exception as e:
+        print(f"Image OCR error: {e}")
+        return ""
 
 
 def clean_ocr_text(raw_text):
@@ -293,8 +330,6 @@ def predict_report():
     try:
         file_bytes = file.read()
 
-        # ✅ PDF → pdfplumber (tesseract नाही!)
-        # ✅ Image → pytesseract
         if filename.endswith('.pdf'):
             text = extract_text_from_pdf(file_bytes)
         else:
